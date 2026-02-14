@@ -4,7 +4,8 @@
  * Usage: node scripts/seed-admin.js
  * Variables optionnelles: ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_PHONE, ADMIN_FIRST_NAME, ADMIN_LAST_NAME
  */
-require('dotenv').config();
+const path = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
+require('dotenv').config({ path });
 const bcrypt = require('bcryptjs');
 const pool = require('../src/config/database');
 

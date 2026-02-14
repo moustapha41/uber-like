@@ -3,7 +3,9 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
-require('dotenv').config();
+// En production, charger .env.production si présent
+const path = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
+require('dotenv').config({ path });
 
 const app = express();
 const server = http.createServer(app);

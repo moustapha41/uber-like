@@ -1,8 +1,10 @@
 const { Pool } = require('pg');
 
-// Charger .env.test en mode test, sinon .env
+// Charger .env.test en mode test, .env.production en prod, sinon .env
 if (process.env.NODE_ENV === 'test') {
   require('dotenv').config({ path: '.env.test' });
+} else if (process.env.NODE_ENV === 'production') {
+  require('dotenv').config({ path: '.env.production' });
 } else {
   require('dotenv').config();
 }
