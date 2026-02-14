@@ -1,0 +1,23 @@
+# Créer le fichier .env.test
+
+Exécutez cette commande dans le terminal :
+
+cd /home/moustapha/Bike/backend
+
+cat > .env.test << 'EOF'
+NODE_ENV=test
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME_TEST=bikeride_pro_test
+DB_USER=postgres
+DB_PASSWORD=votre_mot_de_passe_postgres
+JWT_SECRET=test-secret-key-for-testing-only-do-not-use-in-production
+REDIS_HOST=localhost
+REDIS_PORT=6379
+GOOGLE_MAPS_API_KEY=
+MAPBOX_ACCESS_TOKEN=
+EOF
+
+# Puis éditez .env.test pour ajouter votre mot de passe PostgreSQL
+nano .env.test
+

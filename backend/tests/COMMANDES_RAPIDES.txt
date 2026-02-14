@@ -1,0 +1,17 @@
+# Commandes rapides pour configurer et exécuter les tests
+
+# 1. Créer la base de données
+sudo -u postgres createdb bikeride_pro_test
+
+# 2. Créer les tables
+sudo -u postgres psql -d bikeride_pro_test -f tests/setup-database-complete.sql
+
+# 3. Créer .env.test
+cp .env.test.example .env.test
+# Puis éditer .env.test avec vos credentials
+
+# 4. Vérifier
+node tests/check-prerequisites.js
+
+# 5. Exécuter les tests
+npm test

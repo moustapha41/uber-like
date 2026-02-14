@@ -1,0 +1,29 @@
+# 🚀 Commandes Finales pour Exécuter les Tests
+
+## Étape 1 : Créer la Base de Données
+sudo -u postgres createdb bikeride_pro_test
+
+## Étape 2 : Créer les Tables
+cd /home/moustapha/Bike/backend
+sudo -u postgres psql -d bikeride_pro_test -f tests/setup-database-complete.sql
+
+## Étape 3 : Créer .env.test
+cat > .env.test << 'ENVEOF'
+NODE_ENV=test
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME_TEST=bikeride_pro_test
+DB_USER=postgres
+DB_PASSWORD=
+JWT_SECRET=test-secret-key-for-testing-only
+ENVEOF
+
+# Puis éditer pour ajouter votre mot de passe
+nano .env.test
+
+## Étape 4 : Vérifier
+node tests/check-prerequisites.js
+
+## Étape 5 : Exécuter les Tests
+npm test
+
