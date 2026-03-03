@@ -45,6 +45,7 @@ class _MainMapScreenInitialPageState extends State<MainMapScreenInitialPage> {
   List<Map<String, dynamic>> _availableDeliveries = [];
   bool _loadingAvailable = false;
   Timer? _pollTimer;
+  Timer? _missionPollTimer;
   Timer? _pendingDemandTimer;
   Map<String, dynamic>? _currentMission;
   Map<String, dynamic>? _pendingDemand;
@@ -187,6 +188,7 @@ class _MainMapScreenInitialPageState extends State<MainMapScreenInitialPage> {
         } else {
           _pollTimer?.cancel();
           _pollTimer = null;
+          _stopMissionPolling();
           _stopLocationTracking();
           setState(() {
             _availableRides = [];
@@ -332,6 +334,7 @@ class _MainMapScreenInitialPageState extends State<MainMapScreenInitialPage> {
               _availableRides.where((r) => r['id'] != rideId).toList();
         });
         _startLocationTracking();
+        _startMissionPolling();
         _loadRouteForMission();
       }
     } catch (e) {
@@ -374,6 +377,7 @@ class _MainMapScreenInitialPageState extends State<MainMapScreenInitialPage> {
               .toList();
         });
         _startLocationTracking();
+        _startMissionPolling();
         _loadRouteForMission();
       }
     } catch (e) {
@@ -404,6 +408,57 @@ class _MainMapScreenInitialPageState extends State<MainMapScreenInitialPage> {
   void _stopLocationTracking() {
     _locationTrackingTimer?.cancel();
     _locationTrackingTimer = null;
+  }
+
+  void _startMissionPolling() {
+    _missionPollTimer?.cancel();
+    _missionPollTimer = Timer.periodic(
+      const Duration(seconds: 8),
+      (_) => _pollCurrentMission(),
+    );
+    _pollCurrentMission();
+  }
+
+  void _stopMissionPolling() {
+    _missionPollTimer?.cancel();
+    _missionPollTimer = null;
+  }
+
+  Future<void> _pollCurrentMission() async {
+    if (_currentMission == null) return;
+    final type = _currentMission!['type'] as String? ?? '';
+    final id = _currentMission!['id'] as int? ?? 0;
+    if (type.isEmpty || id == 0) return;
+    final auth = AuthService();
+    await auth.loadStoredAuth();
+    if (auth.driverId == null) return;
+    try {
+      final String status;
+      if (type == 'ride') {
+        final data = await DriverRidesService(apiClient: auth.apiClient).getById(id);
+        status = (data['status'] ?? '').toString().toUpperCase();
+      } else {
+        final data = await DriverDeliveriesService(apiClient: auth.apiClient).getById(id);
+        status = (data['status'] ?? '').toString().toUpperCase();
+      }
+      if (status == 'CANCELLED_BY_CLIENT') {
+        if (!mounted) return;
+        _stopMissionPolling();
+        _stopLocationTracking();
+        setState(() {
+          _currentMission = null;
+          _routePolyline = [];
+          _isMissionCardExpanded = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(type == 'ride'
+                ? 'Le client a annulé la course'
+                : 'Le client a annulé la livraison'),
+          ),
+        );
+      }
+    } catch (_) {}
   }
 
   Future<void> _sendLocationUpdate(String type, int id) async {
@@ -581,6 +636,7 @@ class _MainMapScreenInitialPageState extends State<MainMapScreenInitialPage> {
             actualDurationMin: min >= 0 ? min : 1,
           );
           if (mounted) {
+            _stopMissionPolling();
             _stopLocationTracking();
             setState(() {
               _currentMission = null;
@@ -618,6 +674,7 @@ class _MainMapScreenInitialPageState extends State<MainMapScreenInitialPage> {
             actualDurationMin: min >= 0 ? min : 1,
           );
           if (mounted) {
+            _stopMissionPolling();
             _stopLocationTracking();
             setState(() {
               _currentMission = null;
@@ -671,168 +728,10 @@ class _MainMapScreenInitialPageState extends State<MainMapScreenInitialPage> {
       currentLat: _currentLatLng?.latitude,
       currentLng: _currentLatLng?.longitude,
       onResultSelected: (result) {
+        GeocodingService.recordFrequentDestination(result.lat, result.lng, result.displayName);
         Navigator.pop(context);
         _mapController.move(LatLng(result.lat, result.lng), 15.0);
       },
-    );
-  }
-}
-
-class _SearchDialogWidget extends StatefulWidget {
-  final ThemeData theme;
-  final double? currentLat;
-  final double? currentLng;
-  final Function(GeocodingResult) onResultSelected;
-
-  const _SearchDialogWidget({
-    required this.theme,
-    this.currentLat,
-    this.currentLng,
-    required this.onResultSelected,
-  });
-
-  @override
-  State<_SearchDialogWidget> createState() => _SearchDialogWidgetState();
-}
-
-class _SearchDialogWidgetState extends State<_SearchDialogWidget> {
-  final TextEditingController _searchController = TextEditingController();
-  List<GeocodingResult> _searchResults = [];
-  bool _searching = false;
-  Timer? _searchDebounce;
-
-  @override
-  void initState() {
-    super.initState();
-    _searchController.addListener(_onSearchChanged);
-    _loadLocalSuggestions();
-  }
-
-  @override
-  void dispose() {
-    _searchDebounce?.cancel();
-    _searchController.removeListener(_onSearchChanged);
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  void _onSearchChanged() {
-    _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 400), _runSearch);
-  }
-
-  Future<void> _runSearch() async {
-    final q = _searchController.text.trim();
-    if (q.isEmpty) {
-      await _loadLocalSuggestions();
-      return;
-    }
-    setState(() => _searching = true);
-    final results = await GeocodingService.search(
-      q,
-      currentLat: widget.currentLat,
-      currentLng: widget.currentLng,
-    );
-    if (!mounted) return;
-    setState(() {
-      _searchResults = results;
-      _searching = false;
-    });
-  }
-
-  Future<void> _loadLocalSuggestions() async {
-    final suggestions = await GeocodingService.search(
-      '',
-      currentLat: widget.currentLat,
-      currentLng: widget.currentLng,
-    );
-    if (mounted) setState(() => _searchResults = suggestions);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: EdgeInsets.all(4.w),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Rechercher un lieu', style: widget.theme.textTheme.titleLarge),
-            SizedBox(height: 2.h),
-            TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Point de départ (ou sélectionner depuis la carte)',
-                prefixIcon: CustomIconWidget(
-                  iconName: 'search',
-                  color: widget.theme.colorScheme.onSurfaceVariant,
-                  size: 24,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                suffixIcon: _searching
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : null,
-              ),
-            ),
-            if (_searchResults.isNotEmpty) ...[
-              SizedBox(height: 2.h),
-              SizedBox(
-                height: 30.h,
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: _searchResults.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final r = _searchResults[index];
-                    return ListTile(
-                      dense: true,
-                      leading: Icon(
-                        r.type == 'airport'
-                            ? Icons.flight
-                            : r.type == 'station'
-                                ? Icons.train
-                                : r.type == 'hospital'
-                                    ? Icons.local_hospital
-                                    : r.type == 'university'
-                                        ? Icons.school
-                                        : Icons.location_on,
-                        color: widget.theme.colorScheme.primary,
-                      ),
-                      title: Text(
-                        r.displayName,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: widget.theme.textTheme.bodySmall,
-                      ),
-                      onTap: () => widget.onResultSelected(r),
-                    );
-                  },
-                ),
-              ),
-            ],
-            SizedBox(height: 2.h),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Fermer'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -896,8 +795,6 @@ class _SearchDialogWidgetState extends State<_SearchDialogWidget> {
                         final status = (data['status'] ?? '').toString();
                         final type = _currentMission!['type'] as String? ?? '';
                         final markers = <Marker>[];
-                        
-                        // Marqueur pickup (si on va vers le pickup ou si on est au pickup)
                         if (type == 'ride' && (status == 'DRIVER_ASSIGNED' || status == 'DRIVER_ARRIVED')) {
                           final pickupLat = _parseDouble(data['pickup_lat']);
                           final pickupLng = _parseDouble(data['pickup_lng']);
@@ -921,8 +818,6 @@ class _SearchDialogWidgetState extends State<_SearchDialogWidget> {
                             ));
                           }
                         }
-                        
-                        // Marqueur dropoff (si on va vers le dropoff)
                         if (type == 'ride' && status == 'IN_PROGRESS') {
                           final dropoffLat = _parseDouble(data['dropoff_lat']);
                           final dropoffLng = _parseDouble(data['dropoff_lng']);
@@ -946,7 +841,6 @@ class _SearchDialogWidgetState extends State<_SearchDialogWidget> {
                             ));
                           }
                         }
-                        
                         return markers;
                       }(),
                     ],
@@ -1448,7 +1342,6 @@ class _SearchDialogWidgetState extends State<_SearchDialogWidget> {
         ? (estimatedFare is num ? (estimatedFare as num).toStringAsFixed(0) : estimatedFare.toString()) + ' XOF'
         : '—';
 
-    // Interface réduite en bas : barre minimale par défaut, s'étend au clic
     return Positioned(
       bottom: 2.h,
       left: 4.w,
@@ -1463,7 +1356,6 @@ class _SearchDialogWidgetState extends State<_SearchDialogWidget> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Ligne principale (toujours visible)
                 Row(
                   children: [
                     Expanded(
@@ -1490,7 +1382,6 @@ class _SearchDialogWidgetState extends State<_SearchDialogWidget> {
                     ),
                   ],
                 ),
-                // Détails (seulement si étendu)
                 if (_isMissionCardExpanded) ...[
                   SizedBox(height: 1.5.h),
                   Row(
@@ -1570,6 +1461,7 @@ class _SearchDialogWidgetState extends State<_SearchDialogWidget> {
         await DriverDeliveriesService(apiClient: auth.apiClient).cancel(id);
       }
       if (mounted) {
+        _stopMissionPolling();
         _stopLocationTracking();
         setState(() {
           _currentMission = null;
@@ -1595,9 +1487,169 @@ class _SearchDialogWidgetState extends State<_SearchDialogWidget> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _missionPollTimer?.cancel();
     _locationTrackingTimer?.cancel();
     _pendingDemandTimer?.cancel();
     _mapController.dispose();
     super.dispose();
+  }
+}
+
+class _SearchDialogWidget extends StatefulWidget {
+  final ThemeData theme;
+  final double? currentLat;
+  final double? currentLng;
+  final Function(GeocodingResult) onResultSelected;
+
+  const _SearchDialogWidget({
+    required this.theme,
+    this.currentLat,
+    this.currentLng,
+    required this.onResultSelected,
+  });
+
+  @override
+  State<_SearchDialogWidget> createState() => _SearchDialogWidgetState();
+}
+
+class _SearchDialogWidgetState extends State<_SearchDialogWidget> {
+  final TextEditingController _searchController = TextEditingController();
+  List<GeocodingResult> _searchResults = [];
+  bool _searching = false;
+  Timer? _searchDebounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(_onSearchChanged);
+    _loadLocalSuggestions();
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 400), _runSearch);
+  }
+
+  Future<void> _runSearch() async {
+    final q = _searchController.text.trim();
+    if (q.isEmpty) {
+      await _loadLocalSuggestions();
+      return;
+    }
+    setState(() => _searching = true);
+    final results = await GeocodingService.search(
+      q,
+      currentLat: widget.currentLat,
+      currentLng: widget.currentLng,
+    );
+    if (!mounted) return;
+    setState(() {
+      _searchResults = results;
+      _searching = false;
+    });
+  }
+
+  Future<void> _loadLocalSuggestions() async {
+    final suggestions = await GeocodingService.search(
+      '',
+      currentLat: widget.currentLat,
+      currentLng: widget.currentLng,
+    );
+    if (mounted) setState(() => _searchResults = suggestions);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(4.w),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Rechercher un lieu', style: widget.theme.textTheme.titleLarge),
+            SizedBox(height: 2.h),
+            TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Point de départ (ou sélectionner depuis la carte)',
+                prefixIcon: CustomIconWidget(
+                  iconName: 'search',
+                  color: widget.theme.colorScheme.onSurfaceVariant,
+                  size: 24,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                suffixIcon: _searching
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : null,
+              ),
+            ),
+            if (_searchResults.isNotEmpty) ...[
+              SizedBox(height: 2.h),
+              SizedBox(
+                height: 30.h,
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: _searchResults.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final r = _searchResults[index];
+                    return ListTile(
+                      dense: true,
+                      leading: Icon(
+                        r.type == 'airport'
+                            ? Icons.flight
+                            : r.type == 'station'
+                                ? Icons.train
+                                : r.type == 'hospital'
+                                    ? Icons.local_hospital
+                                    : r.type == 'university'
+                                        ? Icons.school
+                                        : Icons.location_on,
+                        color: widget.theme.colorScheme.primary,
+                      ),
+                      title: Text(
+                        r.displayName,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: widget.theme.textTheme.bodySmall,
+                      ),
+                      onTap: () => widget.onResultSelected(r),
+                    );
+                  },
+                ),
+              ),
+            ],
+            SizedBox(height: 2.h),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Fermer'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

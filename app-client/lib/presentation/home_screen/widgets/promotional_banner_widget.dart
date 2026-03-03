@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sizer/sizer.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../core/app_export.dart';
-import '../../../widgets/custom_image_widget.dart';
 
 class PromotionalBannerWidget extends StatelessWidget {
   final String title;
   final String description;
   final String imageUrl;
+  final bool isLocalImage;
   final String semanticLabel;
   final String code;
 
@@ -17,6 +18,7 @@ class PromotionalBannerWidget extends StatelessWidget {
     required this.title,
     required this.description,
     required this.imageUrl,
+    this.isLocalImage = false,
     required this.semanticLabel,
     required this.code,
   });
@@ -51,13 +53,32 @@ class PromotionalBannerWidget extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           child: Stack(
             children: [
-              CustomImageWidget(
-                imageUrl: imageUrl,
-                width: double.infinity,
-                height: 20.h,
-                fit: BoxFit.cover,
-                semanticLabel: semanticLabel,
-              ),
+              isLocalImage
+                  ? Image.asset(
+                      imageUrl,
+                      width: double.infinity,
+                      height: 20.h,
+                      fit: BoxFit.cover,
+                      semanticLabel: semanticLabel,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: Colors.grey[300],
+                        child: Icon(Icons.error, color: Colors.red),
+                      ),
+                    )
+                  : CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      width: double.infinity,
+                      height: 20.h,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        color: Colors.grey[200],
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        color: Colors.grey[300],
+                        child: Icon(Icons.error, color: Colors.red),
+                      ),
+                    ),
               Container(
                 width: double.infinity,
                 height: 20.h,

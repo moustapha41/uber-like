@@ -1,10 +1,12 @@
 const { Pool } = require('pg');
+const fs = require('fs');
 
-// Charger .env.test en mode test, .env.production en prod, sinon .env
+// Charger .env.test en test ; en prod : .env si existant, sinon .env.production ; sinon .env
 if (process.env.NODE_ENV === 'test') {
   require('dotenv').config({ path: '.env.test' });
 } else if (process.env.NODE_ENV === 'production') {
-  require('dotenv').config({ path: '.env.production' });
+  const envFile = fs.existsSync('.env') ? '.env' : '.env.production';
+  require('dotenv').config({ path: envFile });
 } else {
   require('dotenv').config();
 }
@@ -16,7 +18,7 @@ const pool = new Pool({
     ? (process.env.DB_NAME_TEST || 'bikeride_pro_test')
     : (process.env.DB_NAME || 'bikeride_pro'),
   user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || '',
+  password: typeof process.env.DB_PASSWORD === 'string' ? process.env.DB_PASSWORD : '',
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,

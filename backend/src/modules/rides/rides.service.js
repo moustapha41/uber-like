@@ -503,7 +503,7 @@ class RidesService {
     const validStatuses = ['REQUESTED', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED'];
 
     if (!validStatuses.includes(rideData.status)) {
-      throw new Error(`Cannot cancel ride in status: ${rideData.status}`);
+      throw new Error('Impossible d\'annuler une course en cours. Veuillez d\'abord terminer la course actuelle.');
     }
 
     let status;

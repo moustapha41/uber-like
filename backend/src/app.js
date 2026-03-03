@@ -1,11 +1,14 @@
 const express = require('express');
 const http = require('http');
+const fs = require('fs');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
-// En production, charger .env.production si présent
-const path = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
-require('dotenv').config({ path });
+// En production : charger .env s'il existe (valeurs remplies), sinon .env.production
+const envFile = process.env.NODE_ENV === 'production'
+  ? (fs.existsSync('.env') ? '.env' : '.env.production')
+  : (process.env.NODE_ENV === 'test' ? '.env.test' : '.env');
+require('dotenv').config({ path: envFile });
 
 const app = express();
 const server = http.createServer(app);
@@ -90,14 +93,40 @@ app.use(`/api/${API_VERSION}/audit`, require('./modules/audit/routes'));
 app.use(`/api/${API_VERSION}/maps`, require('./modules/maps/routes'));
 app.use(`/api/${API_VERSION}/payment`, require('./modules/payment/routes'));
 
-// Error handling middleware
+// Gestionnaire d'erreurs global
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.status || 500).json({
+  console.error('Erreur:', err.message);
+  
+  // Messages d'erreur personnalisés
+  const errorMessages = {
+    'Cannot cancel ride in status': 'Impossible d\'annuler une course en cours. Veuillez d\'abord terminer la course actuelle.',
+    'Ride not found': 'Course introuvable',
+    'Invalid ride status': 'Statut de course invalide',
+    'Missing required fields': 'Champs obligatoires manquants'
+  };
+
+  // Vérifie si le message d'erreur correspond à un message personnalisé
+  let userFriendlyMessage = err.message;
+  for (const [key, value] of Object.entries(errorMessages)) {
+    if (err.message.includes(key)) {
+      userFriendlyMessage = value;
+      break;
+    }
+  }
+
+  // Si en production, ne pas renvoyer la pile d'appels
+  const errorResponse = {
     success: false,
-    message: err.message || 'Internal Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
+    message: userFriendlyMessage || 'Une erreur est survenue. Veuillez réessayer plus tard.'
+  };
+
+  // En développement, ajouter plus de détails
+  if (process.env.NODE_ENV !== 'production') {
+    errorResponse.error = err.message;
+    errorResponse.stack = err.stack;
+  }
+
+  res.status(err.status || 500).json(errorResponse);
 });
 
 // 404 handler

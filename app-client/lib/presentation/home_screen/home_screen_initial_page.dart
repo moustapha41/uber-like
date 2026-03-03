@@ -50,7 +50,7 @@ class _HomeScreenInitialPageState extends State<HomeScreenInitialPage> {
       "id": 1,
       "title": "Première course gratuite",
       "description": "Utilisez le code MOTO2026 pour votre première course",
-      "image": "https://images.unsplash.com/photo-1683183191700-b8072f734c2c",
+      "image": "assets/images/offers/1.jpeg",
       "semanticLabel":
           "Promotional banner showing a motorcycle rider in urban setting with helmet and leather jacket",
       "code": "MOTO2026",
@@ -59,7 +59,7 @@ class _HomeScreenInitialPageState extends State<HomeScreenInitialPage> {
       "id": 2,
       "title": "Livraison express -20%",
       "description": "Réduction sur toutes les livraisons ce week-end",
-      "image": "https://images.unsplash.com/photo-1695653420508-f2481c1d783c",
+      "image": "assets/images/offers/2.jpeg",
       "semanticLabel":
           "Delivery package being handed over with motorcycle in background",
       "code": "EXPRESS20",
@@ -68,8 +68,7 @@ class _HomeScreenInitialPageState extends State<HomeScreenInitialPage> {
       "id": 3,
       "title": "Parrainez un ami",
       "description": "Gagnez 10€ pour chaque ami parrainé",
-      "image":
-          "https://img.rocket.new/generatedImages/rocket_gen_img_1c1ebfa0a-1768839826769.png",
+      "image": "assets/images/offers/3.png",
       "semanticLabel":
           "Two people shaking hands with city skyline in background",
       "code": "PARRAIN10",
@@ -409,6 +408,7 @@ class _HomeScreenInitialPageState extends State<HomeScreenInitialPage> {
                 title: banner['title'],
                 description: banner['description'],
                 imageUrl: banner['image'],
+                isLocalImage: true,
                 semanticLabel: banner['semanticLabel'],
                 code: banner['code'],
               ),

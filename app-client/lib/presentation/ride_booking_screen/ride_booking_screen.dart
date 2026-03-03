@@ -170,6 +170,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       _searchResults = [];
       _clearRouteAndEstimate();
     });
+    GeocodingService.recordFrequentDestination(r.lat, r.lng, r.displayName);
     _mapController.move(LatLng(r.lat, r.lng), 16);
     _loadRouteAndEstimate();
   }
@@ -207,6 +208,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       _editingPickup = false;
       _clearRouteAndEstimate();
     });
+    GeocodingService.recordFrequentDestination(r.lat, r.lng, r.displayName);
     _mapController.move(LatLng(r.lat, r.lng), 16);
     if (_dropoff != null) _loadRouteAndEstimate();
   }
@@ -220,25 +222,45 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     _estimatePrice = null;
   }
 
-  void _onMapTap(TapPosition tapPosition, LatLng point) {
+  Future<void> _onMapTap(TapPosition tapPosition, LatLng point) async {
     if (_editingPickup) {
       setState(() {
         _pickup = point;
-        _pickupLabel = 'Point sur la carte';
+        _pickupLabel = '…';
         _editingPickup = false;
         _pickupSearchController.clear();
         _pickupSearchResults = [];
         _clearRouteAndEstimate();
       });
+      String? label = await GeocodingService.reverseGeocodeShort(point.latitude, point.longitude);
+      if ((label == null || label.trim().isEmpty) && mounted) {
+        label = await GeocodingService.reverseGeocode(point.latitude, point.longitude);
+      }
+      if (mounted) {
+        setState(() {
+          _pickupLabel = label?.trim().isNotEmpty == true ? label! : 'Point sur la carte';
+          if (label != null && label.trim().isNotEmpty) _pickupSearchController.text = label.trim();
+        });
+      }
       if (_dropoff != null) _loadRouteAndEstimate();
     } else {
       setState(() {
         _dropoff = point;
-        _dropoffLabel = 'Point sur la carte';
+        _dropoffLabel = '…';
         _dropoffSearchController.clear();
         _searchResults = [];
         _clearRouteAndEstimate();
       });
+      String? label = await GeocodingService.reverseGeocodeShort(point.latitude, point.longitude);
+      if ((label == null || label.trim().isEmpty) && mounted) {
+        label = await GeocodingService.reverseGeocode(point.latitude, point.longitude);
+      }
+      if (mounted) {
+        setState(() {
+          _dropoffLabel = label?.trim().isNotEmpty == true ? label! : 'Point sur la carte';
+          if (label != null && label.trim().isNotEmpty) _dropoffSearchController.text = label.trim();
+        });
+      }
       _loadRouteAndEstimate();
     }
   }
@@ -394,6 +416,15 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       }
       if (status == 'CANCELLED_BY_CLIENT' || status == 'CANCELLED_BY_DRIVER' || status == 'CANCELLED_BY_SYSTEM') {
         _stopPolling();
+        if (status == 'CANCELLED_BY_DRIVER') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Le chauffeur a annulé la course')),
+          );
+        } else if (status == 'CANCELLED_BY_SYSTEM') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('La course a été annulée')),
+          );
+        }
         setState(() {
           _createdRide = null;
           _rideDetail = null;

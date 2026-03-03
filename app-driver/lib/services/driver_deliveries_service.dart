@@ -7,6 +7,12 @@ class DriverDeliveriesService {
   DriverDeliveriesService({required ApiClient apiClient}) : _api = apiClient;
   final ApiClient _api;
 
+  /// GET /deliveries/:id — détail livraison (pour vérifier annulation client)
+  Future<Map<String, dynamic>> getById(int id) async {
+    final res = await _api.get('/deliveries/$id');
+    return res['data'] as Map<String, dynamic>? ?? {};
+  }
+
   /// GET /deliveries/driver/available
   Future<List<Map<String, dynamic>>> getAvailable() async {
     final res = await _api.get('/deliveries/driver/available');
